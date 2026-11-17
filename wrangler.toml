@@ -9,7 +9,7 @@ compatibility_date = "2023-10-25"
 
 # Environment variables (non-secret)
 [vars]
-DEFAULT_CHAT_ID = "myreportn8nbot" # Optional: Set a default chat ID here if you don't want to pass it in every request. Leave empty to require it in the body.
+DEFAULT_CHAT_ID = "123456789" # Optional: Set a default chat ID here if you don't want to pass it in every request. Leave empty to require it in the body.
 
 # Secrets like BOT_TOKEN and SENDER_TOKEN should NOT be here.
 # They are set via `wrangler secret put` in the deploy script.
