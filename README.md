@@ -1,3 +1,6 @@
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/irji/SimpleBot)
+
 # Telegram Webhook Forwarder (Cloudflare Worker)
 
 This project is a simple Cloudflare Worker that acts as a bridge between your application (e.g., n8n) and Telegram. It receives HTTP POST requests with a message and forwards them to a specified Telegram chat using a bot.
