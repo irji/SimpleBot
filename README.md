@@ -22,11 +22,11 @@ This project is a simple Cloudflare Worker that acts as a bridge between your ap
 4. The Chat ID where you want to send messages.
 
 ## Setup & Deployment
-1. For using **Cloudflare Workers** please press button on top
+1. For using **Cloudflare Workers** please press button on top.
 
 2. **It will prompt you to enter** your `BOT_TOKEN` (from @BotFather) and your `SENDER_TOKEN` (you can generate any random string, e.g., using `openssl rand -hex 32`).
 
-3. **To get chat id** for `DEFAULT_CHAT_ID` use `curl "https://api.telegram.org/bot<ВАШ_BOT_TOKEN>/getUpdates"` command and check `id` field.
+3. **To get chat id** for `DEFAULT_CHAT_ID` use `curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates"` command and check `id` field.
 
 Alternatively you may use commands: 
 
@@ -67,7 +67,7 @@ In your n8n workflow, use an **HTTP Request** node configured as follows:
 
 ## Configuration
 
-You may modify environment variables **Workers->Settings** after deployment.
+You may modify environment variables via **Workers->Settings** after deployment.
 
 ### Environment Variables (Secrets)
 These are set during deployment via `wrangler secret put`:
