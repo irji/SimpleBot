@@ -59,7 +59,8 @@ In your n8n workflow, use an **HTTP Request** node configured as follows:
   ```json
   {
     "text": "Hello from n8n!",
-    "chat_id": "123456789"
+    "chat_id": "123456789",
+    "parse_mode": "MarkdownV2"
   }
   ```
   *(Note: If you set `DEFAULT_CHAT_ID` in `wrangler.toml`, you can omit `chat_id` from the body.)*
@@ -74,7 +75,7 @@ These are set during deployment via `wrangler secret put`:
 - `SENDER_TOKEN`: The token your application uses to authenticate.
 
 ### Non-Secret Variables (`wrangler.toml`)
-- `DEFAULT_CHAT_ID`: The worker will use this chat ID if none is provided in the request body. To get chat id use `curl "https://api.telegram.org/bot<ВАШ_BOT_TOKEN>/getUpdates"` 
+- `DEFAULT_CHAT_ID`: The worker will use this chat ID if none is provided in the request body. To get chat id use `curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates"` 
 
 ## Local Development
 
