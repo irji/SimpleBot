@@ -1,3 +1,6 @@
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/irji/SimpleBot)
+
 # Telegram Webhook Forwarder (Cloudflare Worker)
 
 This project is a simple Cloudflare Worker that acts as a bridge between your application (e.g., n8n) and Telegram. It receives HTTP POST requests with a message and forwards them to a specified Telegram chat using a bot.
@@ -19,6 +22,13 @@ This project is a simple Cloudflare Worker that acts as a bridge between your ap
 4. The Chat ID where you want to send messages.
 
 ## Setup & Deployment
+1. For using **Cloudflare Workers** please press button on top.
+
+2. **It will prompt you to enter** your `BOT_TOKEN` (from @BotFather) and your `SENDER_TOKEN` (you can generate any random string, e.g., using `openssl rand -hex 32`).
+
+3. **To get chat id** for `DEFAULT_CHAT_ID` use `curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates"` command and check `id` field.
+
+Alternatively you may use commands: 
 
 1. **Clone or copy this project** to your local machine.
 
@@ -49,7 +59,8 @@ In your n8n workflow, use an **HTTP Request** node configured as follows:
   ```json
   {
     "text": "Hello from n8n!",
-    "chat_id": "123456789"
+    "chat_id": "123456789",
+    "parse_mode": "MarkdownV2"
   }
   ```
   *(Note: If you set `DEFAULT_CHAT_ID` in `wrangler.toml`, you can omit `chat_id` from the body.)*
@@ -95,13 +106,15 @@ Supported JSON-RPC methods: `initialize`, `notifications/initialized`, `ping`, `
 
 ## Configuration
 
+You may modify environment variables via **Workers->Settings** after deployment.
+
 ### Environment Variables (Secrets)
 These are set during deployment via `wrangler secret put`:
 - `BOT_TOKEN`: Your Telegram Bot API Token.
 - `SENDER_TOKEN`: The token your application uses to authenticate.
 
 ### Non-Secret Variables (`wrangler.toml`)
-- `DEFAULT_CHAT_ID`: Optional. If set, the worker will use this chat ID if none is provided in the request body.
+- `DEFAULT_CHAT_ID`: The worker will use this chat ID if none is provided in the request body. To get chat id use `curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates"` 
 
 ## Local Development
 
