@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "description": "Cloudflare Worker to forward messages from n8n to Telegram",
   "main": "src/index.js",
+  "type": "module",
   "scripts": {
     "deploy": "./deploy.sh",
-    "dev": "wrangler dev"
+    "dev": "wrangler dev",
+    "test": "node test-local.mjs"
   },
   "keywords": [
     "cloudflare",

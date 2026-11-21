@@ -65,6 +65,45 @@ In your n8n workflow, use an **HTTP Request** node configured as follows:
   ```
   *(Note: If you set `DEFAULT_CHAT_ID` in `wrangler.toml`, you can omit `chat_id` from the body.)*
 
+## MCP Server
+
+The worker also exposes a built-in **MCP (Model Context Protocol) server** at the `/mcp` endpoint using the Streamable HTTP transport (JSON-RPC 2.0). It is protected by the same `SENDER_TOKEN` as `/message`.
+
+Available tool: **`send_message(text)`** — sends the given text to the configured Telegram chat with payload:
+
+```json
+{ "text": "<text argument>", "parse_mode": "MarkdownV2" }
+```
+
+Special MarkdownV2 characters (`_ * [ ] ( ) ~ \` > # + - = | { } . ! \`) in the input text are escaped automatically, so plain text always renders exactly as typed — callers don't need to think about escaping.
+
+### Connecting an MCP client
+
+Point your MCP client (Claude Desktop via proxy, Cursor, Windsurf, n8n AI Agent MCP client node, etc.) to:
+
+```
+URL:    https://<your-worker-url>/mcp
+Header: Authorization: Bearer <YOUR_SENDER_TOKEN>
+```
+
+Example manual check with curl:
+
+```bash
+# List tools
+curl -s https://<your-worker-url>/mcp \
+  -H "Authorization: Bearer <SENDER_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+# Call send_message
+curl -s https://<your-worker-url>/mcp \
+  -H "Authorization: Bearer <SENDER_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"send_message","arguments":{"text":"*Hello* from MCP"}}}'
+```
+
+Supported JSON-RPC methods: `initialize`, `notifications/initialized`, `ping`, `tools/list`, `tools/call`.
+
 ## Configuration
 
 You may modify environment variables via **Workers->Settings** after deployment.
