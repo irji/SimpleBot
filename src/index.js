@@ -8,11 +8,32 @@
  *
  * Secrets (env): BOT_TOKEN, SENDER_TOKEN  (set via `wrangler secret put`)
  * Optional vars: DEFAULT_CHAT_ID          (set in wrangler.toml [vars])
+ *
+ * Endpoints:
+ *   POST /message  -> HTTP forwarder (n8n), authenticated with SENDER_TOKEN
+ *   ANY  /mcp      -> MCP server (JSON-RPC 2.0, Streamable HTTP), tool: send_message
+ *   GET  / or /health -> health-check
  */
+
+import { handleMcp } from './mcp.js';
 
 export default {
   async fetch(request, env, ctx) {
     try {
+      const url = new URL(request.url);
+
+      // --- MCP server endpoint (Streamable HTTP transport) ---
+      // Authenticated the same way as /message: SENDER_TOKEN required,
+      // so random strangers can't call the MCP tools either.
+      if (url.pathname === '/mcp' || url.pathname === '/mcp/') {
+        if (!checkToken(request, env)) {
+          return jsonResponse(401, {
+            error: 'Unauthorized. Send header "Authorization: Bearer <SENDER_TOKEN>" or "X-Auth-Token: <SENDER_TOKEN>"',
+          });
+        }
+        return await handleMcp(request, env);
+      }
+
       return await handleRequest(request, env);
     } catch (err) {
       // Last-resort handler: never let an uncaught exception escape,
@@ -57,30 +78,10 @@ async function handleRequest(request, env) {
 
   // --- Authentication ---
   // Token may come from "Authorization: Bearer <token>" OR "X-Auth-Token: <token>"
-  const authHeader = request.headers.get('Authorization');
-  const xToken = request.headers.get('X-Auth-Token');
-
-  let token = '';
-  if (authHeader) {
-    token = authHeader.replace(/^Bearer\s+/i, '').trim();
-  } else if (xToken) {
-    token = xToken.trim();
-  }
-
-  if (!token) {
+  if (!checkToken(request, env)) {
     return jsonResponse(401, {
-      error: 'Missing token. Send header "Authorization: Bearer <SENDER_TOKEN>" or "X-Auth-Token: <SENDER_TOKEN>"',
+      error: 'Missing or invalid token. Send header "Authorization: Bearer <SENDER_TOKEN>" or "X-Auth-Token: <SENDER_TOKEN>"',
     });
-  }
-
-  if (!env.SENDER_TOKEN) {
-    return jsonResponse(500, {
-      error: 'Server configuration error: SENDER_TOKEN secret is not set. Run: npx wrangler secret put SENDER_TOKEN',
-    });
-  }
-
-  if (token !== env.SENDER_TOKEN) {
-    return jsonResponse(403, { error: 'Forbidden: Invalid token' });
   }
 
   // --- Parse Body ---
@@ -150,6 +151,24 @@ async function handleRequest(request, env) {
       details: String(err && err.message ? err.message : err),
     });
   }
+}
+
+/**
+ * Shared token check for /message and /mcp.
+ * Returns true when the request carries a valid SENDER_TOKEN.
+ */
+function checkToken(request, env) {
+  const authHeader = request.headers.get('Authorization');
+  const xToken = request.headers.get('X-Auth-Token');
+
+  let token = '';
+  if (authHeader) {
+    token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  } else if (xToken) {
+    token = xToken.trim();
+  }
+
+  return Boolean(token) && token === env.SENDER_TOKEN;
 }
 
 /**
