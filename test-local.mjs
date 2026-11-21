@@ -93,13 +93,14 @@ async function rpc(method, params, id = 1, headers = {}) {
 }
 
 // 6. tools/call send_message -> payload to Telegram contains parse_mode MarkdownV2
+//    and special characters are auto-escaped
 {
   sentToTelegram.length = 0;
-  const r = await rpc('tools/call', { name: 'send_message', arguments: { text: '*bold* text' } });
+  const r = await rpc('tools/call', { name: 'send_message', arguments: { text: 'a.b! c_d' } });
   const ok = r.status === 200 && r.json?.result?.isError === false;
   check('MCP tools/call success', ok, r.text);
   const tg = sentToTelegram[sentToTelegram.length - 1];
-  check('TG payload text', tg?.body?.text === '*bold* text', tg?.body);
+  check('TG payload text is escaped', tg?.body?.text === 'a\\.b\\! c\\_d', tg?.body);
   check('TG payload parse_mode=MarkdownV2', tg?.body?.parse_mode === 'MarkdownV2', tg?.body);
   check('TG payload chat_id', tg?.body?.chat_id === env.DEFAULT_CHAT_ID, tg?.body);
 }

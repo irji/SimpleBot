@@ -64,6 +64,8 @@ Available tool: **`send_message(text)`** — sends the given text to the configu
 { "text": "<text argument>", "parse_mode": "MarkdownV2" }
 ```
 
+Special MarkdownV2 characters (`_ * [ ] ( ) ~ \` > # + - = | { } . ! \`) in the input text are escaped automatically, so plain text always renders exactly as typed — callers don't need to think about escaping.
+
 ### Connecting an MCP client
 
 Point your MCP client (Claude Desktop via proxy, Cursor, Windsurf, n8n AI Agent MCP client node, etc.) to:

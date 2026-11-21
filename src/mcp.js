@@ -16,17 +16,27 @@
 const PROTOCOL_VERSION = '2025-03-26';
 const SERVER_INFO = { name: 'telegram-webhook-forwarder', version: '1.0.0' };
 
+/**
+ * Escape special MarkdownV2 characters so arbitrary plain text can be sent
+ * safely with parse_mode: "MarkdownV2" without Telegram rejecting it.
+ * Reference: https://core.telegram.org/api/entities#entity-types
+ */
+export function escapeMarkdownV2(text) {
+  return String(text).replace(/[_*[\]()~`>#+\-=|{}.!\\]/g, '\\$&');
+}
+
 const TOOLS = [
   {
     name: 'send_message',
     description:
-      'Send a text message to the configured Telegram chat. The message is forwarded with parse_mode "MarkdownV2".',
+      'Send a text message to the configured Telegram chat. The message is forwarded with parse_mode "MarkdownV2". ' +
+      'Special characters are escaped automatically, so plain text always renders as typed.',
     inputSchema: {
       type: 'object',
       properties: {
         text: {
           type: 'string',
-          description: 'Message text (MarkdownV2 formatting supported)',
+          description: 'Message text. MarkdownV2 special characters are auto-escaped.',
         },
       },
       required: ['text'],
@@ -141,8 +151,10 @@ async function handleToolCall(id, params, env) {
 
   // Payload exactly as requested:
   // { "text": <text argument>, "parse_mode": "MarkdownV2" }
+  // Special MarkdownV2 characters are escaped automatically so the user
+  // doesn't have to think about it — plain text always renders as typed.
   const tgPayload = {
-    text: text,
+    text: escapeMarkdownV2(text),
     parse_mode: 'MarkdownV2',
     chat_id: chatId,
     disable_web_page_preview: true,
