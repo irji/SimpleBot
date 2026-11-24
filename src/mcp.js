@@ -9,34 +9,80 @@
  *   - tools/list      -> exposes the "send_message" tool
  *   - tools/call      -> executes "send_message"
  *
- * send_message(text): forwards a message to Telegram as JSON:
- *   { "text": <text argument>, "parse_mode": "MarkdownV2" }
+ * send_message(text): converts light markdown to Telegram-safe HTML and
+ * forwards it to Telegram as JSON:
+ *   { "text": <converted text>, "parse_mode": "HTML" }
  */
 
 const PROTOCOL_VERSION = '2025-03-26';
 const SERVER_INFO = { name: 'telegram-webhook-forwarder', version: '1.0.0' };
 
 /**
- * Escape special MarkdownV2 characters so arbitrary plain text can be sent
- * safely with parse_mode: "MarkdownV2" without Telegram rejecting it.
- * Reference: https://core.telegram.org/api/entities#entity-types
+ * Convert lightweight markdown to Telegram-safe HTML.
+ *
+ * The message is sent with parse_mode: "HTML", which — unlike MarkdownV2 —
+ * cannot be broken by ordinary text: only "&", "<" and ">" are special, and
+ * they are escaped below. On top of that a small markdown subset is
+ * translated into HTML entities:
+ *
+ *   *bold*  _italic_  ~strikethrough~  ||spoiler||
+ *   `inline code`  ```code block```  [text](https://example.com)
+ *
+ * A backslash escapes the next markup character (\* \_ \` \~ \| \[ \] \\),
+ * making it render literally. Everything else renders exactly as typed.
  */
-export function escapeMarkdownV2(text) {
-  return String(text).replace(/[_*[\]()~`>#+\-=|{}.!\\]/g, '\\$&');
+const PUA = '\uE000'; // private-use marker; stripped from input so it can never collide
+
+export function markdownToTelegramHtml(text) {
+  const stash = [];
+  const protect = (html) => PUA + (stash.push(html) - 1) + PUA;
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  let s = String(text).replace(/\uE000/g, '');
+
+  // Code spans first: no markup is interpreted inside them.
+  s = s.replace(/```([\s\S]+?)```/g, (_, c) =>
+    protect(`<pre>${esc(c.replace(/^\n/, '').replace(/\n$/, ''))}</pre>`)
+  );
+  s = s.replace(/`([^`\n]+)`/g, (_, c) => protect(`<code>${esc(c)}</code>`));
+
+  // Escape everything the HTML parser cares about. After this step the
+  // remaining text is safe no matter what it contains.
+  s = esc(s);
+
+  // Backslash-escaped markup characters become literal characters.
+  s = s.replace(/\\([\\_*~`|[\]()])/g, (_, ch) => protect(ch));
+
+  // Markdown subset -> Telegram HTML entities.
+  // Links: protect the <a> tag so later passes can't rewrite the URL.
+  s = s.replace(/\[([^\]\n]+)\]\(([^()\s]+)\)/g, (m, label, url) => {
+    if (!/^(https?:\/\/|tg:\/\/)/i.test(url)) return m; // unknown/unsafe scheme -> stay literal
+    return protect(`<a href="${url.replace(/"/g, '%22')}">`) + label + protect('</a>');
+  });
+  s = s.replace(/\|\|([^|\n]+)\|\|/g, '<tg-spoiler>$1</tg-spoiler>');
+  s = s.replace(/\*([^*\n]+)\*/g, '<b>$1</b>');
+  s = s.replace(/_([^_\n]+)_/g, '<i>$1</i>');
+  s = s.replace(/~{1,2}([^~\n]+)~{1,2}/g, '<s>$1</s>');
+
+  // Restore stashed fragments (code spans, literal characters, link tags).
+  return s.replace(/\uE000(\d+)\uE000/g, (_, i) => stash[+i]);
 }
 
 const TOOLS = [
   {
     name: 'send_message',
     description:
-      'Send a text message to the configured Telegram chat. The message is forwarded with parse_mode "MarkdownV2". ' +
-      'Special characters are escaped automatically, so plain text always renders as typed.',
+      'Send a text message to the configured Telegram chat. Light markdown is rendered: ' +
+      '*bold*, _italic_, ~strikethrough~, ||spoiler||, `inline code`, ```code blocks``` and [text](https://example.com) links. ' +
+      'Everything else is sent literally as typed; to show a markup character, escape it with a backslash (\\* \\_ \\` \\|).',
     inputSchema: {
       type: 'object',
       properties: {
         text: {
           type: 'string',
-          description: 'Message text. MarkdownV2 special characters are auto-escaped.',
+          description:
+            'Message text. Supports *bold*, _italic_, ~strikethrough~, ||spoiler||, `code`, ' +
+            '[text](url) links and ```code blocks```. Prefix a markup character with a backslash to send it literally.',
         },
       },
       required: ['text'],
@@ -149,13 +195,12 @@ async function handleToolCall(id, params, env) {
     return rpcResult(id, toolTextError('Server configuration error: BOT_TOKEN secret is not set'));
   }
 
-  // Payload exactly as requested:
-  // { "text": <text argument>, "parse_mode": "MarkdownV2" }
-  // Special MarkdownV2 characters are escaped automatically so the user
-  // doesn't have to think about it — plain text always renders as typed.
+  // Light markdown is converted to Telegram-safe HTML. parse_mode "HTML"
+  // cannot be broken by ordinary text (only & < > are special and they are
+  // escaped), so plain text always renders exactly as typed.
   const tgPayload = {
-    text: escapeMarkdownV2(text),
-    parse_mode: 'MarkdownV2',
+    text: markdownToTelegramHtml(text),
+    parse_mode: 'HTML',
     chat_id: chatId,
     disable_web_page_preview: true,
   };

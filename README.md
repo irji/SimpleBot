@@ -1,5 +1,8 @@
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/irji/SimpleBot)
+[![Run on Google Cloud](https://deploy.cloud.run/button.svg)](https://deploy.cloud.run?git_repo=https://github.com/irji/SimpleBot)
+
+*Note: the Google Cloud button builds the repo's `Dockerfile` and deploys the service, but doesn't configure secrets. After deploying, set `BOT_TOKEN` and `SENDER_TOKEN` — the easiest way is to run [`deploy-gcp.sh`](#alternative-deploy-to-google-cloud-run), which also wires up Secret Manager.*
 
 # Telegram Webhook Forwarder (Cloudflare Worker)
 
@@ -45,6 +48,36 @@ Alternatively you may use commands:
 3. **Get your Worker URL**:
    After deployment, the script will output a URL like `https://telegram-webhook-forwarder.<your-subdomain>.workers.dev`. Save this URL.
 
+### Alternative: deploy to Google Cloud Run
+
+The same code runs on **Google Cloud Run** — `src/index.js` only uses web-standard APIs (`Request` / `Response` / `fetch`), and `server.js` is a thin Node.js HTTP adapter for it. All endpoints (`/message`, `/mcp`) work identically.
+
+Prerequisites: the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) (`gcloud`) and a GCP project with billing enabled.
+
+```bash
+export GCP_PROJECT_ID=my-project       # or: gcloud config set project my-project
+export GCP_REGION=europe-west1         # optional, this is the default
+export DEFAULT_CHAT_ID=123456789       # optional non-secret variable
+chmod +x deploy-gcp.sh
+./deploy-gcp.sh
+```
+
+The script:
+
+1. enables the Cloud Run, Cloud Build and Secret Manager APIs;
+2. stores `BOT_TOKEN` and `SENDER_TOKEN` in **Secret Manager** (reads them from the environment or prompts interactively; existing secrets are kept);
+3. builds the container from the `Dockerfile` and deploys the service, then prints the URL.
+
+On Windows, run the script from Git Bash or WSL.
+
+The service uses public ingress because the app authenticates callers itself with the `SENDER_TOKEN` header — same as the Cloudflare version. To additionally require Google IAM authentication, deploy without `--allow-unauthenticated` and call it with signed ID tokens.
+
+You can also run the Node adapter locally (handy for developing the Cloud Run path):
+
+```bash
+BOT_TOKEN=... SENDER_TOKEN=... DEFAULT_CHAT_ID=... npm start   # listens on :8080
+```
+
 ## Usage from n8n
 
 In your n8n workflow, use an **HTTP Request** node configured as follows:
@@ -69,13 +102,27 @@ In your n8n workflow, use an **HTTP Request** node configured as follows:
 
 The worker also exposes a built-in **MCP (Model Context Protocol) server** at the `/mcp` endpoint using the Streamable HTTP transport (JSON-RPC 2.0). It is protected by the same `SENDER_TOKEN` as `/message`.
 
-Available tool: **`send_message(text)`** — sends the given text to the configured Telegram chat with payload:
+Available tool: **`send_message(text)`** — converts light markdown to Telegram-safe HTML and sends:
 
 ```json
-{ "text": "<text argument>", "parse_mode": "MarkdownV2" }
+{ "text": "<converted text>", "parse_mode": "HTML" }
 ```
 
-Special MarkdownV2 characters (`_ * [ ] ( ) ~ \` > # + - = | { } . ! \`) in the input text are escaped automatically, so plain text always renders exactly as typed — callers don't need to think about escaping.
+Supported markup:
+
+| You write                     | Telegram shows                 |
+| ----------------------------- | ------------------------------ |
+| `*bold*`                      | **bold**                       |
+| `_italic_`                    | italic                         |
+| `~strikethrough~`             | ~~strikethrough~~              |
+| `\|\|spoiler\|\|`             | spoiler (hidden until tapped)  |
+| `` `inline code` ``           | `inline code`                  |
+| `` ```code block``` ``        | monospace block                |
+| `[text](https://example.com)` | link                           |
+
+Everything else is sent exactly as typed. The worker no longer uses `parse_mode: "MarkdownV2"` (where characters like `. ! - ( )` had to be escaped and were easy to get wrong) — with `parse_mode: "HTML"` only `&`, `<` and `>` are special, and all three are escaped automatically, so ordinary text can never break the message.
+
+To output a markup character literally, escape it with a backslash: `\*`, `\_`, `` \` ``, `\~`, `\|`, `\\`.
 
 ### Connecting an MCP client
 

@@ -92,17 +92,60 @@ async function rpc(method, params, id = 1, headers = {}) {
   check('MCP tool schema requires text', tool?.inputSchema?.required?.includes('text'), r.text);
 }
 
-// 6. tools/call send_message -> payload to Telegram contains parse_mode MarkdownV2
-//    and special characters are auto-escaped
-{
+// 6. tools/call send_message -> markdown converted to Telegram-safe HTML
+async function sendMessage(text) {
   sentToTelegram.length = 0;
-  const r = await rpc('tools/call', { name: 'send_message', arguments: { text: 'a.b! c_d' } });
-  const ok = r.status === 200 && r.json?.result?.isError === false;
-  check('MCP tools/call success', ok, r.text);
+  const r = await rpc('tools/call', { name: 'send_message', arguments: { text } });
   const tg = sentToTelegram[sentToTelegram.length - 1];
-  check('TG payload text is escaped', tg?.body?.text === 'a\\.b\\! c\\_d', tg?.body);
-  check('TG payload parse_mode=MarkdownV2', tg?.body?.parse_mode === 'MarkdownV2', tg?.body);
+  return { r, tg };
+}
+
+{
+  const { r, tg } = await sendMessage('a.b! c_d');
+  check('MCP tools/call success', r.status === 200 && r.json?.result?.isError === false, r.text);
+  check('plain text renders as typed', tg?.body?.text === 'a.b! c_d', tg?.body);
+  check('TG payload parse_mode=HTML', tg?.body?.parse_mode === 'HTML', tg?.body);
   check('TG payload chat_id', tg?.body?.chat_id === env.DEFAULT_CHAT_ID, tg?.body);
+}
+
+{
+  const { tg } = await sendMessage('*тест* и _курсив_');
+  check('bold and italic converted', tg?.body?.text === '<b>тест</b> и <i>курсив</i>', tg?.body);
+}
+
+{
+  const { tg } = await sendMessage('5 * 3 = 15');
+  check('unbalanced * stays literal', tg?.body?.text === '5 * 3 = 15', tg?.body);
+}
+
+{
+  const { tg } = await sendMessage('\\*не жирный\\* и \\_не курсив\\_');
+  check('backslash escapes render literally', tg?.body?.text === '*не жирный* и _не курсив_', tg?.body);
+}
+
+{
+  const nl = String.fromCharCode(10);
+  const { tg } = await sendMessage('`code *x*` and ```' + nl + 'pre *y*' + nl + '```');
+  check('markup inside code spans ignored', tg?.body?.text === '<code>code *x*</code> and <pre>pre *y*</pre>', tg?.body);
+}
+
+{
+  const { tg } = await sendMessage('<b>hi</b> & <script>');
+  check('HTML is escaped, not interpreted', tg?.body?.text === '&lt;b&gt;hi&lt;/b&gt; &amp; &lt;script&gt;', tg?.body);
+}
+
+{
+  const { tg } = await sendMessage('[site](https://x.com/a?b=1&c=2) и [bad](javascript:alert(1))');
+  check(
+    'links converted, unsafe scheme stays literal',
+    tg?.body?.text === '<a href="https://x.com/a?b=1&amp;c=2">site</a> и [bad](javascript:alert(1))',
+    tg?.body
+  );
+}
+
+{
+  const { tg } = await sendMessage('~~удар~~ и ||спойлер||');
+  check('strikethrough and spoiler', tg?.body?.text === '<s>удар</s> и <tg-spoiler>спойлер</tg-spoiler>', tg?.body);
 }
 
 // 7. tools/call missing text -> isError
